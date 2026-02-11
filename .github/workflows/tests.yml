@@ -1,45 +1,62 @@
-name: Oracle ARM Hunter
+name: Tests
 
 on:
-  workflow_dispatch: # Qo'lda ishga tushirish tugmasini chiqaradi
-  schedule:
-    - cron: '*/5 * * * *' # Har 5 daqiqada avtomatik ishga tushadi
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+#  schedule:
+#    - cron: '*/5 * * * *'
 
 jobs:
-  build:
+  tests:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-versions: ['8.3']
+    name: integration-tests (PHP ${{ matrix.php-versions }})
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Setup PHP
+      - uses: actions/checkout@v1
+      - name: Install PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3' # Eng yangi barqaror PHP talqinini ishlatamiz
+          php-version: ${{ matrix.php-versions }}
+      - name: Validate composer.json and composer.lock
+        run: composer validate
 
-      - name: Install Dependencies
-        run: composer install --no-dev --optimize-autoloader
+      - name: Get Composer Cache Directory
+        id: composer-cache
+        run: |
+          echo "::set-output name=dir::$(composer config cache-files-dir)"
+      - uses: actions/cache@v2
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-${{ matrix.php-version }}-composer-${{ matrix.dependencies }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.php-version }}-composer-${{ matrix.dependencies }}-
 
-      - name: Run Instance Hunter
-        run: php index.php
+      - name: Install dependencies
+        run: |
+          composer update --prefer-dist --no-progress
+      - name: Run test suite
+        run: |
+          vendor/bin/phpunit --color tests/
         env:
-          # GitHub Secrets-dan ma'lumotlarni o'qiymiz
           OCI_REGION: ${{ secrets.OCI_REGION }}
           OCI_USER_ID: ${{ secrets.OCI_USER_ID }}
           OCI_TENANCY_ID: ${{ secrets.OCI_TENANCY_ID }}
-          OCI_KEY_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
-          OCI_PRIVATE_KEY: ${{ secrets.OCI_KEY_FILE }}
+          OCI_KEY_FINGERPRINT: ${{ secrets.OCI_KEY_FINGERPRINT }}
+          OCI_KEY_FILE: ${{ secrets.OCI_PRIVATE_KEY_FILENAME }}
+          OCI_AVAILABILITY_DOMAIN: ${{ secrets.OCI_AVAILABILITY_DOMAIN }}
           OCI_SUBNET_ID: ${{ secrets.OCI_SUBNET_ID }}
           OCI_IMAGE_ID: ${{ secrets.OCI_IMAGE_ID }}
-          
-          # Server parametrlari (24GB RAM va 4 OCPU)
-          OCI_OCPUS: 4
-          OCI_MEMORY_IN_GBS: 24
-          OCI_SHAPE: "VM.Standard.A1.Flex"
-          
-          # Telegram bildirishnomalari
-          TELEGRAM_BOT_API_KEY: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_USER_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          
-          # Singapur uchun odatiy AD (agar xato bersa, o'zingiznikini qo'shing)
-          OCI_AVAILABILITY_DOMAIN: "USvN:AP-SINGAPORE-1-AD-1"
+          OCI_OCPUS: 1
+          OCI_MEMORY_IN_GBS: 6
+          OCI_SHAPE: VM.Standard.A1.Flex
+          OCI_MAX_INSTANCES: 1
+          OCI_SSH_PUBLIC_KEY: ${{ secrets.OCI_SSH_PUBLIC_KEY }}
+          TELEGRAM_USER_ID: ${{ secrets.TELEGRAM_USER_ID }}
+          TELEGRAM_BOT_API_KEY: ${{ secrets.TELEGRAM_BOT_API_KEY }}
