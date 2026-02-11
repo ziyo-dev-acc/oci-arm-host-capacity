@@ -21,7 +21,7 @@ jobs:
         run: composer install --no-dev --optimize-autoloader
 
       - name: Run Instance Hunter
-        run: php run.php
+        run: php index.php
         env:
           # GitHub Secrets-dan ma'lumotlarni o'qiymiz
           OCI_REGION: ${{ secrets.OCI_REGION }}
